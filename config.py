@@ -37,7 +37,7 @@ class CommunicateConfig(object):
 	ACTION_SUCCESS = 0x0001
 
 class DBServerConfig(CommunicateConfig):
-	HOST = "localhost"
+	HOST = ""
 
 class DownloadConfig(CommunicateConfig):
 	HOST = "127.0.0.1"
