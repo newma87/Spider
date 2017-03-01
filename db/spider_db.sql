@@ -1,7 +1,6 @@
 /*
 Navicat MySQL Data Transfer
 
-Source Server         : localhost
 Source Server Version : 50625
 Source Host           : localhost:3306
 Source Database       : spider
