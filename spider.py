@@ -2,7 +2,7 @@
 
 from HTMLParser import HTMLParser
 import requests
-from multiprocessing.connection import Client
+from dbclient import *
 from processmanager import *
 import re
 from time import sleep
@@ -126,10 +126,10 @@ class Spider(HTMLParser):
 		return ret
 
 def fetchWebsite():
-	addr = (CONFIG.HOST, CONFIG.RPC_PORT)
+	addr = (CONFIG.DB_HOST, CONFIG.RPC_PORT)
 	websites = []
 	try:
-		client = Client(addr, authkey = CONFIG.AUTH_KEY)
+		client = get_client(addr)
 		client.send(CONFIG.FETCH_WEBSITE)
 		result = client.recv()
 		if result == CONFIG.ACTION_FAILED:
@@ -146,9 +146,9 @@ def fetchWebsite():
 
 def updateWebsiteStates(websites):
 	print "[Info] Updating websites ..."
-	addr = (CONFIG.HOST, CONFIG.RPC_PORT)
+	addr = (CONFIG.DB_HOST, CONFIG.RPC_PORT)
 	try:
-		client = Client(addr, authkey = CONFIG.AUTH_KEY)
+		client = get_client(addr)
 		if websites and len(websites) > 0:
 			client.send(CONFIG.UPDATE_WESITE_STATE)
 			client.send(websites)
@@ -161,28 +161,28 @@ def updateWebsiteStates(websites):
 
 def uploadWesites(websites):
 	print "[Info] Uploading websites(%d) ..." % len(websites)
-	addr = (CONFIG.HOST, CONFIG.RPC_PORT)
+	addr = (CONFIG.DB_HOST, CONFIG.RPC_PORT)
 	try:
-		client = Client(addr, authkey = CONFIG.AUTH_KEY)
+		client = get_client(addr)
 		client.send(CONFIG.UPLOAD_WEBSITE)
 		client.send(websites)
 		if client.recv() == CONFIG.ACTION_FAILED:
 			print "[Error] upload fetched websites failed!"
-		print "[Info] Uploading websites done!"
+		print "[Info] Upload websites done!"
 		client.close()
 	except EOFError:
 		print "[Warn] Server has been closed"
 
 def uploadImages(images):
 	print "[Info] Uploading images(%d) ..." % len(images)
-	addr = (CONFIG.HOST, CONFIG.RPC_PORT)
+	addr = (CONFIG.DB_HOST, CONFIG.RPC_PORT)
 	try:
-		client = Client(addr, authkey = CONFIG.AUTH_KEY)
+		client = get_client(addr)
 		client.send(CONFIG.UPLOAD_IMAGE)
 		client.send(images)
 		if client.recv() == CONFIG.ACTION_FAILED:
-			print "[Error] upload fetched images failed!"
-		print "[Info] Uploading images done!"
+			print "[Error] Upload fetched images failed!"
+		print "[Info] Upload images done!"
 		client.close()
 	except EOFError:
 		print "[Warn] Server has been closed"

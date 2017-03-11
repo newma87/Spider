@@ -6,10 +6,12 @@ import re
 import os
 import shutil
 import time
-from multiprocessing.connection import Client
+#from multiprocessing.connection import Client
+import socket
 from processmanager import *
 
 from dbmodel import DBImage
+from dbclient import *
 from config import DownloadConfig as CONFIG
 from config import REQUEST_STATE
 
@@ -54,6 +56,8 @@ class Downloader(object):
 		except Exception as ex:
 			print "[Warn]Downloader.download {%s}: Raise exception<%s>" % (src, str(ex))
 	
+		if not ret and os.path.exists(path):
+			os.remove(path) #delete failed image
 		return ret
 
 def getDir():
@@ -63,10 +67,10 @@ def getDir():
 	return dir_path
 
 def fetchImages():
-	addr = (CONFIG.HOST, CONFIG.RPC_PORT)
+	addr = (CONFIG.DB_HOST, CONFIG.RPC_PORT)
 	images = None
 	try:
-		client = Client(addr, authkey = CONFIG.AUTH_KEY)
+		client = get_client(addr)
 		client.send(CONFIG.FETCH_IMAGE)
 		result = client.recv()
 		if result == CONFIG.ACTION_FAILED:
@@ -84,9 +88,9 @@ def fetchImages():
 
 def updateImages(images):
 	print "[Info]Updating images"
-	addr = (CONFIG.HOST, CONFIG.RPC_PORT)
+	addr = (CONFIG.DB_HOST, CONFIG.RPC_PORT)
 	try:
-		client = Client(addr, authkey = CONFIG.AUTH_KEY)
+		client = get_client(addr)
 		client.send(CONFIG.UPDATE_IMAGE_STATE)
 		client.send(images)
 		if client.recv() == CONFIG.ACTION_FAILED:
@@ -95,7 +99,7 @@ def updateImages(images):
 	except EOFError:
 		print "[Warn] Server has been closed"
 
-	print "[Info] Updating images done"
+	print "[Info] Update images done"
 
 def procMain(pid, states):
 	states[pid] = STATE_IDLE
@@ -111,13 +115,13 @@ def procMain(pid, states):
 				if img.name != "":
 					file_name = img.name 
 
-				print "[Info]Download image {%s} " % img.url
+				print "[Info]Downloading image {%s} " % img.url
 				if Downloader.download(img.url, save_dir, file_name):
 					img.request_state = REQUEST_STATE.SUCC
 					img.save_path = save_dir
 				else:
 					img.requests_state = REQUEST_STATE.FAIL
-					print "[Debug]download image{%s} failed!" % img.url
+					print "[Error]download image{%s} failed!" % img.url
 
 			updateImages(images)
 		else:

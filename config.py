@@ -37,14 +37,14 @@ class CommunicateConfig(object):
 	ACTION_SUCCESS = 0x0001
 
 class DBServerConfig(CommunicateConfig):
-	HOST = "localhost"
+	HOST = ""
 
 class DownloadConfig(CommunicateConfig):
-	HOST = "127.0.0.1"
+	DB_HOST = "localhost"
 	MAX_PROC_NUM = 10
 	
 class SpiderConfig(CommunicateConfig):
-	HOST = "127.0.0.1"
+	DB_HOST = "localhost"
 	MAX_PROC_NUM = 10
 
 

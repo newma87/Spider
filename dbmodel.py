@@ -1,5 +1,6 @@
 #-*- encoding:utf-8 -*-
 import hashlib
+import pickle
 
 def hashUrl(url):
 	h = hashlib.sha1()
@@ -66,3 +67,21 @@ class DBWebsite(object):
 
 	def __str__(self):
 		return "{ id:%d, url:%s, request_state:%d, from_url:%s, last_modify:%s }" % (self.id, self.url, self.request_state, str(self.from_url), str(self.last_modify))
+
+class Socket4Pickle(object):
+	def __init__(self, socket):
+		self.__socket = socket
+
+	def recv(self):
+		fobj = self.__socket.makefile('rb')
+   		obj = pickle.load(fobj)
+   		fobj.close()
+		return obj
+
+	def send(self, obj):
+		fobj = self.__socket.makefile('wb')
+   		pickle.dump(obj, fobj, pickle.HIGHEST_PROTOCOL)
+   		fobj.close()
+
+   	def close(self):
+   		self.__socket.close()

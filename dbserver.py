@@ -2,7 +2,8 @@
 
 from dbhelper import Mysql
 
-from multiprocessing.connection import Listener
+#from multiprocessing.connection import Listener
+import socket
 from threading import Thread
 from Queue import Queue
 from config import DBServerConfig as CONFIG
@@ -35,6 +36,17 @@ def D(value):
 		return str(value)
 	else:
 		return value
+
+def get_server(addr):
+	"""
+	s = Listener(addr, authkey = CONFIG.AUTH_KEY)
+	"""
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	#print "[Info]Listen on address: ", addr
+	s.bind(addr)
+	s.listen(1)
+
+	return s
 
 class DBOperator(object):
 	def __init__(self):
@@ -151,23 +163,24 @@ class DBServer(object):
 
 	__MAX_CONNECT_QUEUE__ = 1000
 
-	def __init__(self, port = CONFIG.RPC_PORT, authkey = CONFIG.AUTH_KEY):
+	def __init__(self, port = CONFIG.RPC_PORT):
 		self.address = (CONFIG.HOST, port)
-		self.authkey = authkey
 		self.isTerminal = False
 		self.__pool = ThreadPool(maxsize = 4)
 
 	def run(self):
 		print "[Info]DBServer started!"
 		self.isTerminal = False
-		listener = Listener(self.address, authkey = self.authkey)
+		server = get_server(self.address)
 
 		while not self.isTerminal:
-			conn = listener.accept()
+			conn = server.accept()
+			if type(conn) is tuple: # server must be a socket, not a multiprocessing.connection.Listener
+				conn = Socket4Pickle(conn[0])
 			self.__pool.runTaskAsync(callback = self.handleConnection, params = [conn])
 
 		self.isTerminal = True
-		listener.close()
+		server.close()
 		print "[Info]DBserver close!"
 
 	def queryValidateWebsites(self):
@@ -335,9 +348,12 @@ def procMain(pid, states):
 	states[pid] = STATE_TERMINATE
 
 if __name__ == '__main__':
-#	with DBOperator() as db:
-#		web = DBWebsite(url = 'http://xorx.cf/thread0806.php?fid=16')
-#		print 'insert new website record ', db.insertWebsite(web)
+	"""
+	url = raw_input("please input need to insert url: ")
+	with DBOperator() as db:
+		web = DBWebsite(url = url)
+		print 'insert new website "%s" record result: %s' % (url, db.insertWebsite(web))
+	"""
 	num = 1
 	if len(os.sys.argv) > 1:
 		num = int(os.sys.argv[1])
