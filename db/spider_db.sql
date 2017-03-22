@@ -10,7 +10,7 @@ Target Server Type    : MYSQL
 Target Server Version : 50625
 File Encoding         : 65001
 
-Date: 2017-03-22 17:34:09
+Date: 2017-03-22 20:52:39
 */
 
 SET FOREIGN_KEY_CHECKS=0;
@@ -27,7 +27,8 @@ CREATE TABLE `image` (
   `save_path` varchar(255) DEFAULT NULL,
   `from_website` int(255) unsigned NOT NULL DEFAULT '0',
   `last_modify` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `url_uni1` (`url`(255))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- ----------------------------
@@ -53,6 +54,7 @@ CREATE TABLE `website` (
   `from_url` int(255) unsigned NOT NULL DEFAULT '0',
   `priority` int(8) NOT NULL DEFAULT '0',
   `last_modify` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `url_uni1` (`url`(255))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 SET FOREIGN_KEY_CHECKS=1;

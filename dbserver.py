@@ -12,20 +12,23 @@ from threadpool import *
 from dbmodel import *
 import datetime
 import os
+import re
 
 from processmanager import *
 
-WEBSITE_INSERT = "INSERT INTO website (url, request_state, from_url, priority) VALUES (%s, %s, %s, %s);"
+WEBSITE_INSERT = "INSERT IGNORE INTO website (url, request_state, from_url, priority) VALUES (%s, %s, %s, %s);"
 WEBSITE_DELETE_BY_ID = "DELETE from website where id=%s;"
 WEBSITE_UPDATE_BY_ID = "UPDATE website SET url=%s, request_state=%s, from_url=%s, priority=%s WHERE id=%s;"
+WEBSITE_UPDATE_MUTIL = "INSERT INTO website (url, request_state, from_url, priority, id) VALUES (%s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE id=VALUES(id), url=VALUES(url), request_state=VALUES(request_state), from_url=VALUES(from_url), priority=VALUES(priority);"
 WEBSITE_SELECT_BY_ID = "SELECT * FROM website WHERE id=%s ORDER BY priority DESC;"
 WEBSITE_SELECT_BY_URL = "SELECT * FROM website WHERE url=%s ORDER BY priority DESC;"
 WEBSITE_SELECT_BY_STATE = "SELECT * FROM website WHERE request_state=%s ORDER BY priority DESC;"
 WEBSITE_UPDATE_STATE = "UPDATE website SET request_state=0 WHERE request_state=1 AND NOW() > DATE_ADD(last_modify, INTERVAL '%s' MINUTE);" % (REFRESH_STATE_INTERVAL)
 
-IMAGE_INSERT = "INSERT INTO image (url, request_state, name, save_path, from_website) VALUES (%s, %s, %s, %s, %s);"
+IMAGE_INSERT = "INSERT IGNORE INTO image (url, request_state, name, save_path, from_website) VALUES (%s, %s, %s, %s, %s);"
 IMAGE_DELETE_BY_ID = "DELETE from image where id=%s;"
 IMAGE_UPDATE_BY_ID = "UPDATE image SET url=%s, request_state=%s, name=%s, save_path=%s, from_website=%s WHERE id=%s;"
+IMAGE_UPDATE_MUTIL = "INSERT INTO image (url, request_state, name, save_path, from_website, id) VALUES (%s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE id=VALUES(id), url=VALUES(url), request_state=VALUES(request_state), from_website=VALUES(from_website), name=VALUES(name), save_path=VALUES(save_path);"
 IMAGE_SELECT_BY_ID = "SELECT * FROM image WHERE id=%s;"
 IMAGE_SELECT_BY_URL = "SELECT * FROM image WHERE url=%s;"
 IMAGE_SELECT_BY_STATE = "SELECT * FROM image WHERE request_state=%s;"
@@ -67,6 +70,16 @@ class DBOperator(object):
 		image.id = self.conn.insertOne(IMAGE_INSERT, (D(image.url), D(image.request_state), D(image.name), D(image.save_path), D(image.from_website)))
 		return image
 
+	def insertMutilImage(self, images):
+		vals = [(D(image.url), D(image.request_state), D(image.name), D(image.save_path), D(image.from_website)) for image in images]
+		count = self.conn.insertMany(IMAGE_INSERT, vals)
+		return count
+
+	def updateMutilImage(self, images):
+		vals = [(D(image.url), D(image.request_state), D(image.name), D(image.save_path), D(image.from_website), D(image.id)) for image in images]
+		count = self.conn.insertMany(IMAGE_UPDATE_MUTIL, vals)
+		return count / 2
+	
 	def updateImage(self, image):
 		count = self.conn.update(IMAGE_UPDATE_BY_ID, (D(image.url), D(image.request_state), D(image.name), D(image.save_path), D(image.from_website), D(image.id)))
 		return count
@@ -134,6 +147,11 @@ class DBOperator(object):
 		else:
 			return False
 
+	def insertMutilWebsite(self, websites):
+		vals = [(D(web.url), D(web.request_state), D(web.from_url), D(web.priority)) for web in websites]
+		count = self.conn.insertMany(WEBSITE_INSERT, vals)
+		return count
+
 	def updateWebsite(self, website):
 		count = self.conn.update(WEBSITE_UPDATE_BY_ID, (D(website.url), D(website.request_state), D(website.from_url), D(website.priority), D(website.id)))
 		return count
@@ -143,16 +161,9 @@ class DBOperator(object):
 		return count
 
 	def updateMutilWebsite(self, websites):
-		ret = True
-		for web in websites:
-			self.updateWebsite(web)
-		return ret
-
-	def updateMutilImage(self, images):
-		ret = True
-		for img in images:
-			self.updateImage(img)
-		return ret
+		vals = [(D(web.url), D(web.request_state), D(web.from_url), D(web.priority), D(web.id)) for web in websites]
+		count = self.conn.insertMany(WEBSITE_UPDATE_MUTIL, vals)
+		return count / 2
 
 	def end(self, ok = True):
 		self.conn.end(ok)
@@ -207,25 +218,16 @@ class DBServer(object):
 	def uploadWebsites(self, websites):
 		ret = True
 		with DBOperator() as db:
-			for web in websites:
-				if db.getWebsiteByUrl(web.url):
-					continue # url already in database
-
-				if db.insertWebsite(web) == False:
-					#reset parent url's state
-					wbs = db.getWebsiteById(web.from_url)
-					wbs.request_state = REQUEST_STATE.NONE
-					db.updateWebsite(wbs)
-					#ret = False
-					print "[Error]insert web url {'%d': '%s'} failed!" % (web.id, web.url)
+			count = db.insertMutilWebsite(websites)
+			print "[Info] Inserted web urls count{%d}" % count
 
 		return ret
 
 	def updateAllWebsites(self, websites):
 		ret = True
 		with DBOperator() as db:
-			if not db.updateMutilWebsite(websites):
-				ret = False
+			count = db.updateMutilWebsite(websites)
+			print "[Info] Updated websites count{%d}" % count
 
 		return ret
 
@@ -251,27 +253,16 @@ class DBServer(object):
 	def uploadImages(self, images):
 		ret = True
 		with DBOperator() as db:
-			for img in images:
-				if db.getImageByUrl(img.url):
-					continue # image already in database
-
-				if db.insertImage(img) == False:
-					#reset parent url's state
-					image = db.getImageById(img.from_website)
-					image.request_state = REQUEST_STATE.NONE
-					db.updateImage(image)
-					#ret = False
-					print "[Error]insert image url {'%d': '%s'} failed!" % (image.id, image.url)
-					#break
+			count = db.insertMutilImage(images)
+			print "[Info] Inserted image urls count{%d}" % count
 
 		return ret
 				
 	def updateAllImages(self, images):
 		ret = True
 		with DBOperator() as db:
-			if not db.updateMutilImage(images):
-				ret = False
-
+			count = db.updateMutilImage(images)
+			print "[Info] Updated images count{%d}" % count
 		return ret
 
 	def handleConnection(self, conn):
@@ -364,4 +355,3 @@ if __name__ == '__main__':
 			
 	pm = ProcessManager(procMain, maxWorker = num)
 	pm.run()
-	
