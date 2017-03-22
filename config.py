@@ -18,7 +18,7 @@ class REQUEST_STATE(object):
 	SUCC = 0x03
 
 class CommunicateConfig(object):
-	RPC_PORT = 8080
+	RPC_PORT = 6580
 	AUTH_KEY = "my secret password"
 	
 	MAX_FETCH_NUM = 10
@@ -48,4 +48,11 @@ class SpiderConfig(CommunicateConfig):
 	MAX_PROC_NUM = 10
 
 
-REFRESH_STATE_INTERVAL = "0:30:0" # {hours}:{minutes}:{seconds} update interval -- current is half hours  
+PROXY_CONFIG = {
+	'http' : 'socks5://127.0.0.1:1080',
+	'https': 'socks5://127.0.0.1:1080'
+}
+
+REFRESH_STATE_INTERVAL = "30" # minute -- current is half hours
+
+MAX_REQUEST_RETRY_TIME = 3 # max retry times when request failed

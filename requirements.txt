@@ -1,4 +1,4 @@
 ###### Requirements without Version Specifiers ######
-requests
+requests[socks]
 mysql-python
 DBUtils

@@ -4,7 +4,7 @@ import pickle
 
 def hashUrl(url):
 	h = hashlib.sha1()
-	h.update(url.encode('utf-8'))
+	h.update(url)
 	return h.hexdigest()
 
 class DBImage(object):
@@ -13,17 +13,20 @@ class DBImage(object):
 
 		if dict != None:
 			self.__dict__.update(dict)
-			return
+		else:
+			self.id = id
+			self.url = url
+			self.request_state = request_state
+			self.save_path = save_path
+			self.from_website = from_website
 
-		self.id = id
-		self.url = url
-		self.request_state = request_state
+		if type(self.url) == unicode:
+			self.url = self.url.encode('utf-8')
+
 		if self.url != "":
 			self.name = hashUrl(self.url)
 		else:
 			self.name = ""
-		self.save_path = save_path
-		self.from_website = from_website
 
 	def __getstate__(self):
 		obj = self.__dict__.copy()
@@ -38,22 +41,25 @@ class DBImage(object):
 		self.__dict__.update(dict)
 
 	def  __hash__(self):
-		return hash(self.url.encode('utf-8'))
+		return hash(self.url)
 
 	def __str__(self):
 		return "{ id:%d, url:%s, request_state:%d, name:%s, save_path:%s, from_website:%s, last_modify:%s }" % (self.id, self.url, self.request_state, self.name, self.save_path, str(self.from_website), str(self.last_modify))
 
 class DBWebsite(object):
-	def __init__(self, id = -1	, url = "", request_state = 0, from_url = 0, dict = None):
+	def __init__(self, id = -1	, url = "", request_state = 0, from_url = 0, priority = 0, dict = None):
 		self.last_modify = None
 		if dict != None:
 			self.__dict__.update(dict)
-			return
+		else:
+			self.id = id
+			self.url = url
+			self.request_state = request_state
+			self.from_url = from_url
+			self.priority = priority
 
-		self.id = id
-		self.url = url
-		self.request_state = request_state
-		self.from_url = from_url
+		if type(self.url) == unicode:
+			self.url = self.url.encode('utf-8')
 
 	def __getstate__(self):
 		obj = self.__dict__.copy()
@@ -63,10 +69,10 @@ class DBWebsite(object):
 		self.__dict__.update(dict)
 
 	def  __hash__(self):
-		return hash(self.url.encode('utf-8'))
+		return hash(self.url)
 
 	def __str__(self):
-		return "{ id:%d, url:%s, request_state:%d, from_url:%s, last_modify:%s }" % (self.id, self.url, self.request_state, str(self.from_url), str(self.last_modify))
+		return "{ id:%d, url:%s, request_state:%d, from_url:%s, priority:%d, last_modify:%s }" % (self.id, self.url, self.request_state, str(self.from_url), str(self.priority), str(self.last_modify))
 
 class Socket4Pickle(object):
 	def __init__(self, socket):

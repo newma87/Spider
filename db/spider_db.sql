@@ -1,6 +1,7 @@
 /*
 Navicat MySQL Data Transfer
 
+Source Server         : 127.0.0.1
 Source Server Version : 50625
 Source Host           : localhost:3306
 Source Database       : spider
@@ -9,7 +10,7 @@ Target Server Type    : MYSQL
 Target Server Version : 50625
 File Encoding         : 65001
 
-Date: 2017-03-01 17:25:24
+Date: 2017-03-22 17:34:09
 */
 
 SET FOREIGN_KEY_CHECKS=0;
@@ -20,9 +21,9 @@ SET FOREIGN_KEY_CHECKS=0;
 DROP TABLE IF EXISTS `image`;
 CREATE TABLE `image` (
   `id` int(255) unsigned NOT NULL AUTO_INCREMENT,
-  `url` varchar(1024) CHARACTER SET ascii DEFAULT NULL,
+  `url` varchar(1024) DEFAULT NULL,
   `request_state` tinyint(1) unsigned NOT NULL DEFAULT '0',
-  `name` varchar(255) CHARACTER SET ascii DEFAULT NULL,
+  `name` varchar(255) DEFAULT NULL,
   `save_path` varchar(255) DEFAULT NULL,
   `from_website` int(255) unsigned NOT NULL DEFAULT '0',
   `last_modify` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -47,9 +48,10 @@ CREATE TABLE `user` (
 DROP TABLE IF EXISTS `website`;
 CREATE TABLE `website` (
   `id` int(255) unsigned NOT NULL AUTO_INCREMENT,
-  `url` varchar(1024) CHARACTER SET ascii DEFAULT NULL,
+  `url` varchar(1024) DEFAULT NULL,
   `request_state` tinyint(1) unsigned NOT NULL DEFAULT '0',
   `from_url` int(255) unsigned NOT NULL DEFAULT '0',
+  `priority` int(8) NOT NULL DEFAULT '0',
   `last_modify` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;

@@ -2,7 +2,7 @@
 
 from dbhelper import Mysql
 
-#from multiprocessing.connection import Listener
+from multiprocessing.connection import Listener
 import socket
 from threading import Thread
 from Queue import Queue
@@ -15,13 +15,13 @@ import os
 
 from processmanager import *
 
-WEBSITE_INSERT = "INSERT INTO website (url, request_state, from_url) VALUES (%s, %s, %s);"
+WEBSITE_INSERT = "INSERT INTO website (url, request_state, from_url, priority) VALUES (%s, %s, %s, %s);"
 WEBSITE_DELETE_BY_ID = "DELETE from website where id=%s;"
-WEBSITE_UPDATE_BY_ID = "UPDATE website SET url=%s, request_state=%s, from_url=%s WHERE id=%s;"
-WEBSITE_SELECT_BY_ID = "SELECT * FROM website WHERE id=%s;"
-WEBSITE_SELECT_BY_URL = "SELECT * FROM website WHERE url=%s;"
-WEBSITE_SELECT_BY_STATE = "SELECT * FROM website WHERE request_state=%s;"
-WEBSITE_UPDATE_STATE = "UPDATE website SET request_state=0 WHERE request_state=1 AND NOW() > DATE_ADD(last_modify, INTERVAL '%s' HOUR_SECOND);" % (REFRESH_STATE_INTERVAL)
+WEBSITE_UPDATE_BY_ID = "UPDATE website SET url=%s, request_state=%s, from_url=%s, priority=%s WHERE id=%s;"
+WEBSITE_SELECT_BY_ID = "SELECT * FROM website WHERE id=%s ORDER BY priority DESC;"
+WEBSITE_SELECT_BY_URL = "SELECT * FROM website WHERE url=%s ORDER BY priority DESC;"
+WEBSITE_SELECT_BY_STATE = "SELECT * FROM website WHERE request_state=%s ORDER BY priority DESC;"
+WEBSITE_UPDATE_STATE = "UPDATE website SET request_state=0 WHERE request_state=1 AND NOW() > DATE_ADD(last_modify, INTERVAL '%s' MINUTE);" % (REFRESH_STATE_INTERVAL)
 
 IMAGE_INSERT = "INSERT INTO image (url, request_state, name, save_path, from_website) VALUES (%s, %s, %s, %s, %s);"
 IMAGE_DELETE_BY_ID = "DELETE from image where id=%s;"
@@ -29,23 +29,25 @@ IMAGE_UPDATE_BY_ID = "UPDATE image SET url=%s, request_state=%s, name=%s, save_p
 IMAGE_SELECT_BY_ID = "SELECT * FROM image WHERE id=%s;"
 IMAGE_SELECT_BY_URL = "SELECT * FROM image WHERE url=%s;"
 IMAGE_SELECT_BY_STATE = "SELECT * FROM image WHERE request_state=%s;"
-IMAGE_UPDATE_STATE = "UPDATE image SET request_state=0 WHERE request_state=1 AND NOW() > DATE_ADD(last_modify, INTERVAL '%s' HOUR_SECOND);" % (REFRESH_STATE_INTERVAL)
+IMAGE_UPDATE_STATE = "UPDATE image SET request_state=0 WHERE request_state=1 AND NOW() > DATE_ADD(last_modify, INTERVAL '%s' MINUTE);" % (REFRESH_STATE_INTERVAL)
 
 def D(value):
 	if type(value) is not str:
-		return str(value)
+		if type(value) == unicode:
+			return value.encode('utf-8')
+		else:
+			return str(value)
 	else:
 		return value
 
-def get_server(addr):
-	"""
-	s = Listener(addr, authkey = CONFIG.AUTH_KEY)
-	"""
-	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	#print "[Info]Listen on address: ", addr
-	s.bind(addr)
-	s.listen(1)
-
+def get_server(addr, means = 'socket'):
+	if means.lower() == 'socket':
+		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		#print "[Info]Listen on address: ", addr
+		s.bind(addr)
+		s.listen(1)
+	else:
+		s = Listener(addr, authkey = CONFIG.AUTH_KEY)
 	return s
 
 class DBOperator(object):
@@ -125,7 +127,7 @@ class DBOperator(object):
 			return None
 
 	def insertWebsite(self, website):
-		ret = self.conn.insertOne(WEBSITE_INSERT, (D(website.url), D(website.request_state), D(website.from_url)))
+		ret = self.conn.insertOne(WEBSITE_INSERT, (D(website.url), D(website.request_state), D(website.from_url), D(website.priority)))
 		if ret > 0:
 			website.id = ret
 			return self.getWebsiteById(website.id)
@@ -133,7 +135,7 @@ class DBOperator(object):
 			return False
 
 	def updateWebsite(self, website):
-		count = self.conn.update(WEBSITE_UPDATE_BY_ID, (D(website.url), D(website.request_state), D(website.from_url), D(website.id)))
+		count = self.conn.update(WEBSITE_UPDATE_BY_ID, (D(website.url), D(website.request_state), D(website.from_url), D(website.priority), D(website.id)))
 		return count
 
 	def deleteWebsiteById(self, id):
@@ -171,7 +173,7 @@ class DBServer(object):
 	def run(self):
 		print "[Info]DBServer started!"
 		self.isTerminal = False
-		server = get_server(self.address)
+		server = get_server(self.address, means = 'Socket')
 
 		while not self.isTerminal:
 			conn = server.accept()
@@ -362,3 +364,4 @@ if __name__ == '__main__':
 			
 	pm = ProcessManager(procMain, maxWorker = num)
 	pm.run()
+	

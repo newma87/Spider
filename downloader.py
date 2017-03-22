@@ -13,16 +13,17 @@ from processmanager import *
 from dbmodel import DBImage
 from dbclient import *
 from config import DownloadConfig as CONFIG
-from config import REQUEST_STATE
+from config import REQUEST_STATE, PROXY_CONFIG, MAX_REQUEST_RETRY_TIME
 
 IMGREG = re.compile("\.([^/^\.]+)$")
-CONNECT_TIME_OUT = 2 #second
+CONNECT_TIME_OUT = 15 #second
+BLACK_SITE_FILE = './image_black_site.json'
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 
 class Downloader(object):
 	@staticmethod
-	def download(src, save_dir = None, file_name = None):
+	def download(src, save_dir = DIR_PATH, file_name = None):
 		ext = ""
 		reg = IMGREG.search(src)
 		if reg:
@@ -35,8 +36,7 @@ class Downloader(object):
 
 		ret = False
 		try:
-			response = requests.get(src, stream = True, verify = False, timeout = CONNECT_TIME_OUT)
-
+			response = requests.get(src, stream = True, verify = False, timeout = CONNECT_TIME_OUT, proxies = PROXY_CONFIG)
 			try:
 				fp = open(path, 'wb')
 				try:
@@ -82,7 +82,7 @@ def fetchImages():
 	except EOFError:
 		print "[Warn]fetchImages: Server side has been closed"
 	except Exception as e:
-		print "[Error]fetchWebsite raise exceptions: %s" % str(e)
+		print "[Error]fetchImages raise exceptions: %s" % str(e)
 
 	return images
 
@@ -90,7 +90,7 @@ def updateImages(images):
 	print "[Info]Updating images"
 	addr = (CONFIG.DB_HOST, CONFIG.RPC_PORT)
 	try:
-		client = get_client(addr)
+		client = get_client(addr, means = 'Socket')
 		client.send(CONFIG.UPDATE_IMAGE_STATE)
 		client.send(images)
 		if client.recv() == CONFIG.ACTION_FAILED:
@@ -104,6 +104,9 @@ def updateImages(images):
 def procMain(pid, states):
 	states[pid] = STATE_IDLE
 
+	# init black site list
+	bSite = BlackSiteList(BLACK_SITE_FILE)
+
 	while True:
 		states[pid] = STATE_CONNECTING
 		images = fetchImages()
@@ -116,12 +119,31 @@ def procMain(pid, states):
 					file_name = img.name 
 
 				print "[Info]Downloading image {%s} " % img.url
+
 				if Downloader.download(img.url, save_dir, file_name):
 					img.request_state = REQUEST_STATE.SUCC
 					img.save_path = save_dir
 				else:
-					img.requests_state = REQUEST_STATE.FAIL
-					print "[Error]download image{%s} failed!" % img.url
+					site = img.url.split('/')[2]
+					fail_count = bSite.getFaileSiteCount(site)
+
+					img.request_state = REQUEST_STATE.FAIL
+					# retry download
+					retry_times = MAX_REQUEST_RETRY_TIME - fail_count
+					if retry_times < 0:
+						retry_times = 0
+
+					while retry_times > 0:
+						print "[Warn]Retry download image {%s} %d times" % (img.url, retry_times)
+						retry_times = retry_times - 1
+						if Downloader.download(img.url, save_dir, file_name):
+							img.request_state = REQUEST_STATE.SUCC
+							img.save_path = save_dir
+							break
+					if img.request_state != REQUEST_STATE.SUCC:
+						bSite.addFaileSite(site)
+						bSite.save()
+						print "[Error]Download image{%s} failed!" % img.url
 
 			updateImages(images)
 		else:
@@ -130,8 +152,9 @@ def procMain(pid, states):
 	states[pid] = STATE_TERMINATE
 
 if __name__ == '__main__':	
-	#procMain(1, {})
-	
+	"""
+	procMain(1, {})
+	"""
 	num = 1
 	if len(os.sys.argv) > 1:
 		num = int(os.sys.argv[1])
@@ -140,3 +163,5 @@ if __name__ == '__main__':
 			
 	pm = ProcessManager(procMain, maxWorker = num)
 	pm.run()
+	
+
