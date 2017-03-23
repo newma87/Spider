@@ -227,7 +227,7 @@ class DBServer(object):
 		ret = True
 		with DBOperator() as db:
 			count = db.insertMutilWebsite(websites)
-			print "[Info] uploaded web urls count{%d}" % count
+			print "[Info] Add website urls count{%d}" % count
 
 		return ret
 
@@ -262,7 +262,7 @@ class DBServer(object):
 		ret = True
 		with DBOperator() as db:
 			count = db.insertMutilImage(images)
-			print "[Info] Uploaded image urls count{%d}" % count
+			print "[Info] Add image urls count{%d}" % count
 
 		return ret
 				
