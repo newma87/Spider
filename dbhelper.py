@@ -145,6 +145,9 @@ class Mysql(object):
         """
         return self.__query(sql,param)
 
+    def autocommit(self, val):
+        self._conn.autocommit = val
+
     def end(self, ok = True):
         """
         @summary: 结束事务

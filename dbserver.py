@@ -22,7 +22,7 @@ WEBSITE_UPDATE_BY_ID = "UPDATE website SET url=%s, request_state=%s, from_url=%s
 WEBSITE_UPDATE_MUTIL = "INSERT INTO website (url, request_state, from_url, priority, id) VALUES (%s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE id=VALUES(id), url=VALUES(url), request_state=VALUES(request_state), from_url=VALUES(from_url), priority=VALUES(priority);"
 WEBSITE_SELECT_BY_ID = "SELECT * FROM website WHERE id=%s ORDER BY priority DESC;"
 WEBSITE_SELECT_BY_URL = "SELECT * FROM website WHERE url=%s ORDER BY priority DESC;"
-WEBSITE_SELECT_BY_STATE = "SELECT * FROM website WHERE request_state=%s ORDER BY priority DESC;"
+WEBSITE_SELECT_BY_STATE = "SELECT * FROM website WHERE request_state=%s ORDER BY priority DESC FOR UPDATE;"
 WEBSITE_UPDATE_STATE = "UPDATE website SET request_state=0 WHERE request_state=1 AND NOW() > DATE_ADD(last_modify, INTERVAL '%s' MINUTE);" % (REFRESH_STATE_INTERVAL)
 
 IMAGE_INSERT = "INSERT IGNORE INTO image (url, request_state, name, save_path, from_website) VALUES (%s, %s, %s, %s, %s);"
@@ -31,7 +31,7 @@ IMAGE_UPDATE_BY_ID = "UPDATE image SET url=%s, request_state=%s, name=%s, save_p
 IMAGE_UPDATE_MUTIL = "INSERT INTO image (url, request_state, name, save_path, from_website, id) VALUES (%s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE id=VALUES(id), url=VALUES(url), request_state=VALUES(request_state), from_website=VALUES(from_website), name=VALUES(name), save_path=VALUES(save_path);"
 IMAGE_SELECT_BY_ID = "SELECT * FROM image WHERE id=%s;"
 IMAGE_SELECT_BY_URL = "SELECT * FROM image WHERE url=%s;"
-IMAGE_SELECT_BY_STATE = "SELECT * FROM image WHERE request_state=%s;"
+IMAGE_SELECT_BY_STATE = "SELECT * FROM image WHERE request_state=%s FOR UPDATE;"
 IMAGE_UPDATE_STATE = "UPDATE image SET request_state=0 WHERE request_state=1 AND NOW() > DATE_ADD(last_modify, INTERVAL '%s' MINUTE);" % (REFRESH_STATE_INTERVAL)
 
 def D(value):
@@ -54,13 +54,15 @@ def get_server(addr, means = 'socket'):
 	return s
 
 class DBOperator(object):
-	def __init__(self):
-		pass
-		#self.conn = Mysql()
 
 	def __enter__(self):
 		self.conn = Mysql()
+		self.conn.autocommit(False)
+		self.__needRollback = False
 		return self
+
+	def rollback(self):
+		self.__needRollback = True
 
 #====================image=======================================
 	def refreshImagesState(self):
@@ -71,11 +73,16 @@ class DBOperator(object):
 		return image
 
 	def insertMutilImage(self, images):
+		if not images or len(images) == 0:
+			return 0
+
 		vals = [(D(image.url), D(image.request_state), D(image.name), D(image.save_path), D(image.from_website)) for image in images]
 		count = self.conn.insertMany(IMAGE_INSERT, vals)
 		return count
 
 	def updateMutilImage(self, images):
+		if not images or len(images) == 0:
+			return 0
 		vals = [(D(image.url), D(image.request_state), D(image.name), D(image.save_path), D(image.from_website), D(image.id)) for image in images]
 		count = self.conn.insertMany(IMAGE_UPDATE_MUTIL, vals)
 		return count / 2
@@ -105,10 +112,7 @@ class DBOperator(object):
 	def getImageByState(self, value = 0, maxNum = 20):
 		rows = self.conn.getMany(IMAGE_SELECT_BY_STATE, maxNum, (D(value), ))
 		if rows:	
-			images = []
-			for row in rows:
-				images.append(DBImage(dict = row))
-			return images
+			return [DBImage(dict = row) for row in rows]
 		else:
 			return None
 	#=================website=======================
@@ -132,10 +136,7 @@ class DBOperator(object):
 	def getWebsiteByState(self, value = 0, maxNum = 20):
 		rows = self.conn.getMany(WEBSITE_SELECT_BY_STATE, maxNum, (D(value), ))
 		if rows:
-			websites = []
-			for row in rows:
-				websites.append(DBWebsite(dict = row))
-			return websites
+			return [DBWebsite(dict = row) for row in rows]
 		else:
 			return None
 
@@ -148,11 +149,15 @@ class DBOperator(object):
 			return False
 
 	def insertMutilWebsite(self, websites):
+		if not websites or len(websites) == 0:
+			return 0
 		vals = [(D(web.url), D(web.request_state), D(web.from_url), D(web.priority)) for web in websites]
 		count = self.conn.insertMany(WEBSITE_INSERT, vals)
 		return count
 
 	def updateWebsite(self, website):
+		if not website:
+			return 0
 		count = self.conn.update(WEBSITE_UPDATE_BY_ID, (D(website.url), D(website.request_state), D(website.from_url), D(website.priority), D(website.id)))
 		return count
 
@@ -161,14 +166,17 @@ class DBOperator(object):
 		return count
 
 	def updateMutilWebsite(self, websites):
+		if not websites or len(websites) == 0:
+			return 0
 		vals = [(D(web.url), D(web.request_state), D(web.from_url), D(web.priority), D(web.id)) for web in websites]
 		count = self.conn.insertMany(WEBSITE_UPDATE_MUTIL, vals)
 		return count / 2
 
-	def end(self, ok = True):
-		self.conn.end(ok)
-
 	def __exit__(self, type, value, traceback):
+		if self.__needRollback:
+			self.conn.end(False)
+		else:
+			self.conn.end(True)
 		self.conn.close()
 		self.conn = None
 
@@ -197,29 +205,29 @@ class DBServer(object):
 		print "[Info]DBserver close!"
 
 	def queryValidateWebsites(self):
+		ret = None
 		with DBOperator() as db:
 			websites = db.getWebsiteByState(REQUEST_STATE.NONE, maxNum = CONFIG.MAX_FETCH_NUM)
 			if websites:
-				flag = True
 				for web in websites:
 					web.request_state = REQUEST_STATE.DOING
-					if db.updateWebsite(web) == 0:
-						print "[Error]DBServer.queryValidateWebsite: update website[%d] state to 1 failed" % (web.id)
-						flag = False
-						break
-				db.end(flag)
-				if flag:
-					return websites
+				count = db.updateMutilWebsite(websites)
+				if count != len(websites):
+					print "[Error]DBServer.queryValidateWebsites: update unvisited websites to state 1 failed do nothing: expect[%d] actually[%d]" % (len(websites), count)
+					db.rollback()
+				else:
+					#print "[Info]DBServer.queryValidateImages: websites count[%d] set state to be visiting" % count
+					ret = websites
 			else:
 				print "[Warn]DBServer.queryValidateWebsite: Can't found unvisited website, so refresh request_state"
 				db.refreshWebsitesState()
-		return None
+		return ret
 
 	def uploadWebsites(self, websites):
 		ret = True
 		with DBOperator() as db:
 			count = db.insertMutilWebsite(websites)
-			print "[Info] Inserted web urls count{%d}" % count
+			print "[Info] uploaded web urls count{%d}" % count
 
 		return ret
 
@@ -232,29 +240,29 @@ class DBServer(object):
 		return ret
 
 	def queryValidateImages(self):
+		ret = None
 		with DBOperator() as db:
 			images = db.getImageByState(REQUEST_STATE.NONE, maxNum = CONFIG.MAX_FETCH_NUM)
 			if images:
-				flag = True
 				for img in images:
 					img.request_state = REQUEST_STATE.DOING
-					if db.updateImage(img) == 0:
-						print "[Error]DBServer.queryValidateImage: update image[%d] state to 1 failed" % (img.id)
-						flag = False
-						break
-				db.end(flag)
-				if flag:
-					return images
+				count = db.updateMutilImage(images)
+				if count != len(images):
+					print "[Error]DBServer.queryValidateImages: update undownload images state to 1 failed, do nothing: expect[%d] but actually[%d]" % (len(images), count)
+					db.rollback()
+				else:
+					#print "[Info]DBServer.queryValidateImage: images count[%d] set state to be visiting" % (count)
+					ret = images
 			else:
 				print "[Warn]DBServer.queryValidateImage: Can't found undownload image, so refresh the request_state"
 				db.refreshImagesState()
-		return None	
+		return ret	
 
 	def uploadImages(self, images):
 		ret = True
 		with DBOperator() as db:
 			count = db.insertMutilImage(images)
-			print "[Info] Inserted image urls count{%d}" % count
+			print "[Info] Uploaded image urls count{%d}" % count
 
 		return ret
 				
@@ -355,3 +363,5 @@ if __name__ == '__main__':
 			
 	pm = ProcessManager(procMain, maxWorker = num)
 	pm.run()
+	
+
