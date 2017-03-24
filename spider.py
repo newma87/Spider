@@ -10,7 +10,7 @@ import os
 
 from dbmodel import DBWebsite, DBImage
 from config import SpiderConfig as CONFIG
-from config import REQUEST_STATE, PROXY_CONFIG, MAX_REQUEST_RETRY_TIME
+from config import REQUEST_STATE, PROXY_CONFIG, MAX_REQUEST_RETRY_TIME, Log
 	
 CONN_TIME_OUT = 15 #second
  
@@ -23,7 +23,7 @@ class Spider(HTMLParser):
 
 	def __adjustUrl(self, src_url):
 		if not self.__feedingUrl:
-			print "[Warn]Spider.adjustUrl: Not __feedingUrl"
+			Log.e("{Spider.__adjustUrl} self.__feedingUrl is None")
 			return src_url
 
 		if src_url == '#':
@@ -87,7 +87,7 @@ class Spider(HTMLParser):
 			if attrs.has_key('src'):
 				url = self.__adjustUrl(attrs['src'])
 				if self.__isValidateImage(url):
-					print "[Info] image: %s" % url
+					Log.d("image: %s", url)
 					self.imgs.add(url)
 
 		if tag == 'input':
@@ -95,7 +95,7 @@ class Spider(HTMLParser):
 			if attrs.has_key('type') and attrs['type'] == 'image' and attrs.has_key('src'):
 				url = self.__adjustUrl(attrs['src'])
 				if self.__isValidateImage(url):
-					print "[Info] image: %s" % url
+					Log.d("image: %s", url)
 					self.imgs.add(url)
 
 		if tag == 'a':
@@ -103,7 +103,7 @@ class Spider(HTMLParser):
 			if attrs.has_key('href'):
 				url = self.__adjustUrl(attrs['href'])
 				if self.__isValidateUrl(url):
-					print "[Info] link: %s" % url
+					Log.d("link: %s", url)
 					self.hrefs.add(url)
 
 	def __getHtmlEncode(self, text, default = 'unicode'):
@@ -118,7 +118,7 @@ class Spider(HTMLParser):
 		ret = False
 		self.__feedingUrl = url
 		try:
-			print "[Info] Requesting url {%s}" % url
+			Log.d("{Spider.fetchForUrl} requesting url(%s)", url)
 			rs = requests.session()
 			resp = rs.get(url, timeout = CONN_TIME_OUT, proxies = PROXY_CONFIG)
 			if resp.status_code == 200:
@@ -129,12 +129,12 @@ class Spider(HTMLParser):
 				self.feed(resp.text)
 				ret = True
 			else:
-				print "[Warn] '%s' address can't be reached!" % url			
+				Log.e("{Spider.fetchForUrl} address(%s) can't be reached!", url)
 
 		except requests.exceptions.ConnectionError as err:
-			print "[Warn] Connect to %s failed: Exception%s" % (url, str(err),)
+			Log.e("{Spider.fetchForUrl} connect to address(%s) failed, exception<%s>", url, str(err),)
 		except requests.exceptions.ReadTimeout as ex:
-			print "[Warn] Connect to %s time out" % url
+			Log.e("{Spider.fetchForUrl} connect to address(%s) time out", url)
 		finally:
 			self.__feedingUrl = None
 
@@ -144,23 +144,23 @@ def fetchWebsite():
 	addr = (CONFIG.DB_HOST, CONFIG.RPC_PORT)
 	websites = []
 	try:
-		client = get_client(addr, means = 'Socket')
+		client = get_client(addr, means = CONFIG.COMMUNICATE_MEANS)
 		client.send(CONFIG.FETCH_WEBSITE)
 		result = client.recv()
 		if result == CONFIG.ACTION_FAILED:
-			print "[Warn] Get validate website failed"
+			Log.e("{Spider.fetchWebsite} get validate website failed")
 		else:
 			websites = client.recv()
 		client.close()
 	except EOFError:
-		print "[Warn] Server has been closed"
+		Log.e("{Spider.fetchWebsite} server has been closed")
 	except Exception as e:
-		print "[Error] FetchWebsite raise exceptions: %s" % str(e)
+		Log.e("{Spider.fetchWebsite} raise exceptions<%s>", str(e))
 
 	return websites
 
 def updateWebsiteStates(websites):
-	print "[Info] Updating websites ..."
+	Log.d("{updateWebsiteStates} updating websites ...")
 	addr = (CONFIG.DB_HOST, CONFIG.RPC_PORT)
 	try:
 		client = get_client(addr)
@@ -168,39 +168,39 @@ def updateWebsiteStates(websites):
 			client.send(CONFIG.UPDATE_WESITE_STATE)
 			client.send(websites)
 			if client.recv() == CONFIG.ACTION_FAILED:
-				print "[Error] tell server to update website state failed!"
-			print "[Info] Updating websites done!"
+				Log.e("{updateWebsiteStates} tell server to update website state failed!")
+			Log.d("{updateWebsiteStates} updating websites done!")
 		client.close()
 	except EOFError:
-		print "[Warn] Server has been closed"
+		Log.e("{updateWebsiteStates} server has been closed")
 
 def uploadWesites(websites):
-	print "[Info] Uploading websites(%d) ..." % len(websites)
+	Log.d("{uploadWesites} uploading websites(%d) ...", len(websites))
 	addr = (CONFIG.DB_HOST, CONFIG.RPC_PORT)
 	try:
 		client = get_client(addr)
 		client.send(CONFIG.UPLOAD_WEBSITE)
 		client.send(websites)
 		if client.recv() == CONFIG.ACTION_FAILED:
-			print "[Error] upload fetched websites failed!"
-		print "[Info] Upload websites done!"
+			Log.e("{uploadWesites} upload fetched websites failed!")
+		Log.d("{uploadWesites} upload websites done!")
 		client.close()
 	except EOFError:
-		print "[Warn] Server has been closed"
+		Log.e("{uploadWesites} server has been closed")
 
 def uploadImages(images):
-	print "[Info] Uploading images(%d) ..." % len(images)
+	Log.d("{uploadImages} uploading images(%d) ...", len(images))
 	addr = (CONFIG.DB_HOST, CONFIG.RPC_PORT)
 	try:
 		client = get_client(addr)
 		client.send(CONFIG.UPLOAD_IMAGE)
 		client.send(images)
 		if client.recv() == CONFIG.ACTION_FAILED:
-			print "[Error] Upload fetched images failed!"
-		print "[Info] Upload images done!"
+			Log.e("{uploadImages} upload fetched images failed!")
+		Log.d("{uploadImages} upload images done!")
 		client.close()
 	except EOFError:
-		print "[Warn] Server has been closed"
+		Log.e("{uploadImages} server has been closed")
 
 def calcPriority(dist_url, src_url):
 	dist = dist_url.split('/')
@@ -219,49 +219,52 @@ def calcPriority(dist_url, src_url):
 def procMain(pid, states):
 	states[pid] = STATE_IDLE
 
-	while True:
-		states[pid] = STATE_CONNECTING
-		print "[Info] Fetching unvisited websites ..."
-		websites = fetchWebsite()
-		print "[Info] Fetched websites(%d)" % len(websites)
-		if websites:
-			states[pid] = STATE_BUSY
-			spider = Spider()
-			wbs = set()
-			images = set()
-			for web in websites:
-				if spider.fetchForUrl(web.url):
-					web.request_state = REQUEST_STATE.SUCC
-					for url in spider.hrefs:
-						wbs.add(DBWebsite(url = url, from_url = web.id, priority = calcPriority(url, web.url)))
-					for img in spider.imgs:
-						images.add(DBImage(url = img, from_website = web.id))
-				else:
-					web.request_state = REQUEST_STATE.FAIL
-					retry_times = MAX_REQUEST_RETRY_TIME
+	try:
+		while True:
+			states[pid] = STATE_CONNECTING
+			Log.d("{procMain} fetching unvisited websites ...")
+			websites = fetchWebsite()
+			Log.d("{procMain} fetched websites(%d)", len(websites))
+			if websites:
+				states[pid] = STATE_BUSY
+				spider = Spider()
+				wbs = set()
+				images = set()
+				for web in websites:
+					if spider.fetchForUrl(web.url):
+						web.request_state = REQUEST_STATE.SUCC
+						for url in spider.hrefs:
+							wbs.add(DBWebsite(url = url, from_url = web.id, priority = calcPriority(url, web.url)))
+						for img in spider.imgs:
+							images.add(DBImage(url = img, from_website = web.id))
+					else:
+						web.request_state = REQUEST_STATE.FAIL
+						retry_times = MAX_REQUEST_RETRY_TIME
 
-					while retry_times > 0:
-						print "[Warn]Retry fetch url {%d: %s}" % (web.id, web.url)
-						retry_times = retry_times - 1
-						if spider.fetchForUrl(web.url):
-							web.request_state = REQUEST_STATE.SUCC
-							for url in spider.hrefs:
-								wbs.add(DBWebsite(url = url, from_url = web.id))
-							for img in spider.imgs:
-								images.add(DBImage(url = img, from_website = web.id))
-							break
-					if web.request_state != REQUEST_STATE.SUCC:
-						print "[Error]Fetch url{%d: %s} failed!" % (web.id, web.url)
-			
-			updateWebsiteStates(websites)
-			uploadWesites(wbs)
-			uploadImages(images)
-		else:
-			sleep(3) # sleep for a while to wait for the database update
-
-	states[pid] = STATE_TERMINATE
+						while retry_times > 0:
+							Log.i("{procMain} retry fetch url(%s) id(%d) times(%d)", web.url, web.id, retry_times)
+							retry_times = retry_times - 1
+							if spider.fetchForUrl(web.url):
+								web.request_state = REQUEST_STATE.SUCC
+								for url in spider.hrefs:
+									wbs.add(DBWebsite(url = url, from_url = web.id))
+								for img in spider.imgs:
+									images.add(DBImage(url = img, from_website = web.id))
+								break
+						if web.request_state != REQUEST_STATE.SUCC:
+							Log.e("{procMain} fetch url(%s) id(%d) failed!", web.url, web.id)
+				
+				updateWebsiteStates(websites)
+				uploadWesites(wbs)
+				uploadImages(images)
+			else:
+				sleep(3) # sleep for a while to wait for the database update
+	except KeyboardInterrupt:
+		Log.i("{procMain} spider process exit for a KeyboardInterrupt")
 
 if __name__ == '__main__':
+	Log.setup('spider')
+
 	#procMain(1, {})
 
 	num = 1

@@ -23,6 +23,8 @@ class CommunicateConfig(object):
 	
 	MAX_FETCH_NUM = 10
 
+	COMMUNICATE_MEANS = 'socket' # socket or pipe
+
 	# protocol
 	FETCH_IMAGE = 0xef01
 	FETCH_WEBSITE = 0xef02
@@ -56,3 +58,40 @@ PROXY_CONFIG = {
 REFRESH_STATE_INTERVAL = "30" # minute -- current is half hours
 
 MAX_REQUEST_RETRY_TIME = 3 # max retry times when request failed
+
+import os
+import json
+import logging.config
+
+class Log(object):
+	logger = None
+
+	@staticmethod
+	def setup(name, default_path='log_conf.json', default_level=logging.INFO, env_key='LOG_CFG'):
+		path = default_path
+		value = os.getenv(env_key, None)
+		if value:
+			path = value
+		if os.path.exists(path):
+			with open(path, 'rt') as f:
+				config = json.load(f)
+			logging.config.dictConfig(config)
+		else:
+			logging.basicConfig(level=default_level)
+		Log.logger = logging.getLogger(name = name)
+
+	@staticmethod
+	def e(fmt, *args):
+		Log.logger.error(fmt, *args)
+
+	@staticmethod
+	def i(fmt, *args):
+		Log.logger.info(fmt, *args)
+
+	@staticmethod
+	def w(fmt, *args):
+		Log.logger.warn(fmt, *args)
+
+	@staticmethod
+	def d(fmt, *args):
+		Log.logger.debug(fmt, *args)

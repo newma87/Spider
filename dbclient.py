@@ -3,6 +3,7 @@
 from multiprocessing.connection import Client
 import socket
 from config import CommunicateConfig as CONFIG
+from config import Log
 from dbmodel import Socket4Pickle
 
 import json
@@ -46,7 +47,7 @@ class BlackSiteList(object):
 				fp.close()
 				return True
 		except IOError:
-			print "[Warn]BlackSiteList.save: save to file {%s} failed!" % self.file_path
+			Log.w("{BlackSiteList.save} save to file (%s) failed!", self.file_path)
 			return False
 
 	def load(self):
@@ -57,5 +58,5 @@ class BlackSiteList(object):
 				self.blackList = json.loads(content)
 				return True
 		except IOError:
-			print "[Warn]BlackSiteList.load: load file {%s} failed!" % self.file_path
+			Log.w("{BlackSiteList.load} load file (%s) failed!", self.file_path)
 			return False

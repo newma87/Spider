@@ -13,7 +13,7 @@ from processmanager import *
 from dbmodel import DBImage
 from dbclient import *
 from config import DownloadConfig as CONFIG
-from config import REQUEST_STATE, PROXY_CONFIG, MAX_REQUEST_RETRY_TIME
+from config import REQUEST_STATE, PROXY_CONFIG, MAX_REQUEST_RETRY_TIME, Log
 
 IMGREG = re.compile("\.([^/^\.]+)$")
 CONNECT_TIME_OUT = 15 #second
@@ -44,17 +44,17 @@ class Downloader(object):
 						shutil.copyfileobj(response.raw, fp)
 						ret = True
 					else:
-						print "[Warn] HTML response state{%d} while downloading '%s'" % (response.raw.status, src)
+						Log.e("{Downloader.download} HTML response state(%d) while downloading (%s)", response.raw.status, src)
 				except requests.packages.urllib3.exceptions.ReadTimeoutError as e:
-					print "[Warn]Download file '%s' failed! Exception<%s>" % (src, str(e))
+					Log.e("{Downloader.download} download file (%s) failed! Exception(%s)", src, str(e))
 				finally:
 					fp.close()
 			except IOError:
-				print "[Warn]Can't write file to path '%s'" % path
+				Log.e("{Downloader.download} can't write file to path (%s)", path)
 		except requests.exceptions.ConnectionError as err:
-			print "[Warn]Connect error: Exception<%s>" % str(err)
+			Log.e("{Downloader.download} connect error: Exception<%s>", str(err))
 		except Exception as ex:
-			print "[Warn]Downloader.download {%s}: Raise exception<%s>" % (src, str(ex))
+			Log.e("{Downloader.download} download (%s): Raise exception<%s>", src, str(ex))
 	
 		if not ret and os.path.exists(path):
 			os.remove(path) #delete failed image
@@ -70,88 +70,90 @@ def fetchImages():
 	addr = (CONFIG.DB_HOST, CONFIG.RPC_PORT)
 	images = None
 	try:
-		client = get_client(addr)
+		client = get_client(addr, means = CONFIG.COMMUNICATE_MEANS)
 		client.send(CONFIG.FETCH_IMAGE)
 		result = client.recv()
 		if result == CONFIG.ACTION_FAILED:
-			print "[Warn]get download images failed"
+			Log.e("{fetchImages} get download images failed")
 		else:
 			images = client.recv()
 
 		client.close()
 	except EOFError:
-		print "[Warn]fetchImages: Server side has been closed"
+		Log.e("{fetchImages} server side has been closed")
 	except Exception as e:
-		print "[Error]fetchImages raise exceptions: %s" % str(e)
+		Log.e("{fetchImages} raise exceptions: %s", str(e))
 
 	return images
 
 def updateImages(images):
-	print "[Info]Updating images"
+	Log.d("{updateImages} updating images ...")
 	addr = (CONFIG.DB_HOST, CONFIG.RPC_PORT)
 	try:
 		client = get_client(addr, means = 'Socket')
 		client.send(CONFIG.UPDATE_IMAGE_STATE)
 		client.send(images)
 		if client.recv() == CONFIG.ACTION_FAILED:
-			print "[Error] Tell server to update images state failed!"
+			Log.e("{updateImages} tell server to update images state failed!")
 		client.close()
 	except EOFError:
-		print "[Warn] Server has been closed"
+		Log.e("{updateImages} server has been closed")
 
-	print "[Info] Update images done"
+	Log.d("{updateImages} update images done")
 
 def procMain(pid, states):
 	states[pid] = STATE_IDLE
 
 	# init black site list
 	bSite = BlackSiteList(BLACK_SITE_FILE)
+	try:
+		while True:
+			states[pid] = STATE_CONNECTING
+			images = fetchImages()
+			if images:
+				states[pid] = STATE_BUSY
+				for img in images:
+					save_dir = getDir()
+					file_name = None
+					if img.name != "":
+						file_name = img.name 
 
-	while True:
-		states[pid] = STATE_CONNECTING
-		images = fetchImages()
-		if images:
-			states[pid] = STATE_BUSY
-			for img in images:
-				save_dir = getDir()
-				file_name = None
-				if img.name != "":
-					file_name = img.name 
+					Log.d("{procMain} downloading image (%s) ", img.url)
 
-				print "[Info]Downloading image {%s} " % img.url
+					if Downloader.download(img.url, save_dir, file_name):
+						img.request_state = REQUEST_STATE.SUCC
+						img.save_path = save_dir
+					else:
+						site = img.url.split('/')[2]
+						fail_count = bSite.getFaileSiteCount(site)
 
-				if Downloader.download(img.url, save_dir, file_name):
-					img.request_state = REQUEST_STATE.SUCC
-					img.save_path = save_dir
-				else:
-					site = img.url.split('/')[2]
-					fail_count = bSite.getFaileSiteCount(site)
+						img.request_state = REQUEST_STATE.FAIL
+						# retry download
+						retry_times = MAX_REQUEST_RETRY_TIME - fail_count
+						if retry_times < 0:
+							retry_times = 0
 
-					img.request_state = REQUEST_STATE.FAIL
-					# retry download
-					retry_times = MAX_REQUEST_RETRY_TIME - fail_count
-					if retry_times < 0:
-						retry_times = 0
+						while retry_times > 0:
+							Log.i("{procMain} retry download image(%s) times(%d)", img.url, retry_times)
+							retry_times = retry_times - 1
+							if Downloader.download(img.url, save_dir, file_name):
+								img.request_state = REQUEST_STATE.SUCC
+								img.save_path = save_dir
+								break
+						if img.request_state != REQUEST_STATE.SUCC:
+							bSite.addFaileSite(site)
+							bSite.save()
+							#Log.e("{procMain} download image(%s) failed!", img.url)
 
-					while retry_times > 0:
-						print "[Warn]Retry download image {%s} %d times" % (img.url, retry_times)
-						retry_times = retry_times - 1
-						if Downloader.download(img.url, save_dir, file_name):
-							img.request_state = REQUEST_STATE.SUCC
-							img.save_path = save_dir
-							break
-					if img.request_state != REQUEST_STATE.SUCC:
-						bSite.addFaileSite(site)
-						bSite.save()
-						print "[Error]Download image{%s} failed!" % img.url
+				updateImages(images)
+			else:
+				time.sleep(3) # sleep for a while to wait for the database update
+	except KeyboardInterrupt:
+		Log.i("{procMain} downloader process exit for a KeyboardInterrupt")
 
-			updateImages(images)
-		else:
-			time.sleep(3) # sleep for a while to wait for the database update
+if __name__ == '__main__':
+	Log.setup("download")
 
-	states[pid] = STATE_TERMINATE
-
-if __name__ == '__main__':	
 	"""
 	procMain(1, {})
 	"""

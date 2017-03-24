@@ -46,7 +46,7 @@ def D(value):
 def get_server(addr, means = 'socket'):
 	if means.lower() == 'socket':
 		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		#print "[Info]Listen on address: ", addr
+		Log.d("{get_server} server listen on address (%s)", addr)
 		s.bind(addr)
 		s.listen(1)
 	else:
@@ -190,19 +190,22 @@ class DBServer(object):
 		self.__pool = ThreadPool(maxsize = 4)
 
 	def run(self):
-		print "[Info]DBServer started!"
+		Log.i("{DBServer.run} DBServer started!")
 		self.isTerminal = False
-		server = get_server(self.address, means = 'Socket')
+		server = get_server(self.address, means = CONFIG.COMMUNICATE_MEANS)
 
-		while not self.isTerminal:
-			conn = server.accept()
-			if type(conn) is tuple: # server must be a socket, not a multiprocessing.connection.Listener
-				conn = Socket4Pickle(conn[0])
-			self.__pool.runTaskAsync(callback = self.handleConnection, params = [conn])
+		try:
+			while not self.isTerminal:
+				conn = server.accept()
+				if type(conn) is tuple: # server must be a socket, not a multiprocessing.connection.Listener
+					conn = Socket4Pickle(conn[0])
+				self.__pool.runTaskAsync(callback = self.handleConnection, params = [conn])
+		except KeyboardInterrupt:
+			Log.i("{DBServer.run} sever process terminate for a KeyboardInterrupt!")
 
 		self.isTerminal = True
 		server.close()
-		print "[Info]DBserver close!"
+		Log.i("{DBServer.run} DBserver closed!")
 
 	def queryValidateWebsites(self):
 		ret = None
@@ -213,13 +216,13 @@ class DBServer(object):
 					web.request_state = REQUEST_STATE.DOING
 				count = db.updateMutilWebsite(websites)
 				if count != len(websites):
-					print "[Error]DBServer.queryValidateWebsites: update unvisited websites to state 1 failed do nothing: expect[%d] actually[%d]" % (len(websites), count)
+					Log.e("{DBServer.queryValidateWebsites} update unvisited websites to state 1 failed do nothing: expect(%d) - actually(%d)", len(websites), count)
 					db.rollback()
 				else:
 					#print "[Info]DBServer.queryValidateImages: websites count[%d] set state to be visiting" % count
 					ret = websites
 			else:
-				print "[Warn]DBServer.queryValidateWebsite: Can't found unvisited website, so refresh request_state"
+				Log.w("{DBServer.queryValidateWebsite} can't found unvisited website, so refresh request_state")
 				db.refreshWebsitesState()
 		return ret
 
@@ -227,7 +230,7 @@ class DBServer(object):
 		ret = True
 		with DBOperator() as db:
 			count = db.insertMutilWebsite(websites)
-			print "[Info] Add website urls count{%d}" % count
+			Log.i("{DBServer.uploadWebsites} add website urls counts(%d)", count)
 
 		return ret
 
@@ -235,7 +238,7 @@ class DBServer(object):
 		ret = True
 		with DBOperator() as db:
 			count = db.updateMutilWebsite(websites)
-			print "[Info] Updated websites count{%d}" % count
+			Log.i("{DBServer.updateAllWebsites} updated websites counts(%d)", count)
 
 		return ret
 
@@ -248,13 +251,13 @@ class DBServer(object):
 					img.request_state = REQUEST_STATE.DOING
 				count = db.updateMutilImage(images)
 				if count != len(images):
-					print "[Error]DBServer.queryValidateImages: update undownload images state to 1 failed, do nothing: expect[%d] but actually[%d]" % (len(images), count)
+					Log.e("{DBServer.queryValidateImages} update undownload images state to 1 failed, do nothing: expect(%d) - actually(%d)", len(images), count)
 					db.rollback()
 				else:
 					#print "[Info]DBServer.queryValidateImage: images count[%d] set state to be visiting" % (count)
 					ret = images
 			else:
-				print "[Warn]DBServer.queryValidateImage: Can't found undownload image, so refresh the request_state"
+				Log.w("{DBServer.queryValidateImage} can't found undownload image, so refresh the request_state")
 				db.refreshImagesState()
 		return ret	
 
@@ -262,7 +265,7 @@ class DBServer(object):
 		ret = True
 		with DBOperator() as db:
 			count = db.insertMutilImage(images)
-			print "[Info] Add image urls count{%d}" % count
+			Log.i("{DBServer.uploadImages} add image urls count(%d)", count)
 
 		return ret
 				
@@ -270,72 +273,72 @@ class DBServer(object):
 		ret = True
 		with DBOperator() as db:
 			count = db.updateMutilImage(images)
-			print "[Info] Updated images count{%d}" % count
+			Log.i("{DBServer.updateAllImages} updated images count{%d}", count)
 		return ret
 
 	def handleConnection(self, conn):
 		try:
 			data = conn.recv()
 			if data == CONFIG.FETCH_WEBSITE:
-				print "[Info] Fetching unvisited websites ..."
+				Log.d("{DBServer.handleConnection} fetching unvisited websites ...")
 				websites = self.queryValidateWebsites()
 				if websites:
 					conn.send(CONFIG.ACTION_SUCCESS)
 					conn.send(websites)
-					print "[Info] Fetched websites(%d)" % len(websites)
+					Log.i("{DBServer.handleConnection} fetched websites(%d)", len(websites))
 				else:
 					conn.send(CONFIG.ACTION_FAILED)
-					print "[Info] Fetched websites failed!"
+					Log.w("{DBServer.handleConnection} fetched websites failed!")
 			
 			elif data == CONFIG.UPDATE_WESITE_STATE:
 				websites = conn.recv()
-				print "[Info] Updating websites's states(%d) ..." % len(websites)
+				Log.i("{DBServer.handleConnection} updating websites's(%d) states ...", len(websites))
 				if self.updateAllWebsites(websites):
 					conn.send(CONFIG.ACTION_SUCCESS)
-					print "[Info] Updated websites!"
+					Log.d("{DBServer.handleConnection} updated websites states")
 				else:
 					conn.send(CONFIG.ACTION_FAILED)
-					print "[Info] Updated websites's states failed!"
+					Log.w("{DBServer.handleConnection} updated websites's states failed!")
 			elif data == CONFIG.UPLOAD_WEBSITE:
 				websites = conn.recv()
-				print "[Info] Uploading websites(%d) ..." % len(websites)
+				Log.i("{DBServer.handleConnection} uploading websites(%d) ...", len(websites))
 				if self.uploadWebsites(websites):
-					print "[Info] Uploaded websites"
+					Log.d("{DBServer.handleConnection} uploaded websites")
 					conn.send(CONFIG.ACTION_SUCCESS)
 				else:
-					print "[Info] Uploaded websites failed!"
+					Log.w("{DBServer.handleConnection} uploaded websites failed!")
 					conn.send(CONFIG.ACTION_FAILED)
 			elif data == CONFIG.UPLOAD_IMAGE:
 				images = conn.recv()
-				print "[Info] Uploading images(%d) ..." % len(images)
+				Log.i("{DBServer.handleConnection} uploading images(%d) ...", len(images))
 				if self.uploadImages(images):
 					conn.send(CONFIG.ACTION_SUCCESS)
-					print "[Info] Uploaded images"
+					Log.d("{DBServer.handleConnection} uploaded images")
 				else:
 					conn.send(CONFIG.ACTION_FAILED)	
-					print "[Info] Uploaded images failed"
+					Log.w("{DBServer.handleConnection} uploaded images failed")
 			elif data == CONFIG.FETCH_IMAGE:
-				print "[Info] Fetching undownload images ..."
+				Log.d("{DBServer.handleConnection} fetching undownload images ...")
 				images = self.queryValidateImages()
 				if images:
 					conn.send(CONFIG.ACTION_SUCCESS)
 					conn.send(images)
-					print "[Info] Fetched images(%d)" % len(images)
+					Log.i("{DBServer.handleConnection} fetched images(%d)", len(images))
 				else:
 					conn.send(CONFIG.ACTION_FAILED)
-					print "[Info] Fetched images failed!"
+					Log.w("{DBServer.handleConnection} fetched images failed!")
 			elif data == CONFIG.UPDATE_IMAGE_STATE:
 				images = conn.recv()
-				print "[Info] Updating images's state(%d) ..." % len(images)  
+				Log.i("{DBServer.handleConnection} updating images's state(%d) ...", len(images))
 				if self.updateAllImages(images):
 					conn.send(CONFIG.ACTION_SUCCESS)
-					print "[Info] Updated images's state"
+					Log.d("{DBServer.handleConnection} updated images's state")
 				else:
 					conn.send(CONFIG.ACTION_FAILED)
-					print "[Info] Updated images's state failed!"
+					Log.w("{DBServer.handleConnection} updated images's state failed!")
 		
 		except EOFError : #client has been closed
-			print "[Warn]handleConnection: Client closed the connection"
+			Log.w("{DBServer.handleConnection} client closed the connection")
 		#except Exception as e:
 		#	print "[Error]handleConnection: Raise Exception%s {%s}" % (type(e), str(e))
 
@@ -346,9 +349,10 @@ def procMain(pid, states):
 	server = DBServer()
 	states[pid] = STATE_BUSY
 	server.run()
-	states[pid] = STATE_TERMINATE
 
 if __name__ == '__main__':
+	Log.setup('server')
+
 	"""
 	url = raw_input("please input need to insert url: ")
 	with DBOperator() as db:

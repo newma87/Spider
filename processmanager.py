@@ -1,6 +1,8 @@
 #-*- encoding:utf-8 -*-
 
 from multiprocessing import Process, Manager
+import signal, os
+from config import Log
 
 STATE_READY = 0x01
 STATE_IDLE = 0x02
@@ -38,17 +40,18 @@ class ProcessManager(object):
 
 	def startProcess(self, index):
 		if self.procStates[index] != STATE_READY:
-			print "[Warn]processe{%d} is not ready, please call setupProccesse() before" % index			
+			Log.w("processe{%d} is not ready, state {%d}, please call setupProccesse() before" % (index, self.procStates[index]))		
 			return False
 		self.processes[index].start()
 		return True
 
 	def terminateProcess(self, index):
 		if self.procStates[index] == STATE_TERMINATE:
-			print "[Warn]processe{%d} has been terminated!" % index
+			Log.w("processe{%d} has been terminated!" % index)
 			return False
 
-		self.processes[index].terminate()
+		os.kill(self.processes[index].pid, signal.SIGINT)
+		self.processes[index].join()
 		self.procStates[index] = STATE_TERMINATE
 		return True
 
@@ -74,7 +77,6 @@ Manage multiprocess spider, use below command(press key before the command):
 
 """
 	def run(self, *args, **kwargs):
-		print self.maxProc
 		self.setupAll()
 
 		self.help()
@@ -86,35 +88,35 @@ Manage multiprocess spider, use below command(press key before the command):
 			if cmd == 'e':
 				break
 			elif cmd == "i":
-				print "Show all process state:"
+				print("Show all process state:")
 				self.showState()
 			elif cmd.startswith("s"):
 				arr = cmd.split(' ')
 				if len(arr) > 1:
-					print "Start processes[%d]" % int(arr[1])
+					print("Start processes[%d]" % int(arr[1]))
 					self.startProcess(int(arr[1]))
 				else:
-					print "Start all processes"
+					print("Start all processes")
 					self.startAll()
 			elif cmd.startswith("t"):
 				arr = cmd.split(' ')
 				if len(arr) > 1:
-					print "Terminate processes[%d]" % int(arr[1])
+					print("Terminate processes[%d]" % int(arr[1]))
 					self.terminateProcess(int(arr[1]))
 					self.setupProccesse(int(arr[1]))
 				else:
-					print "Terminate all processes"
+					print("Terminate all processes")
 					self.terminateAll()
 					self.setupAll()
 			elif cmd.startswith("r"):
 				arr = cmd.split(' ')
 				if len(arr) > 1:
-					print "Restart processes[%d]" % int(arr[1])
+					print("Restart processes[%d]" % int(arr[1]))
 					self.terminateProcess(int(arr[1]))
 					self.setupProccesse(int(arr[1]))
 					self.startProcess(int(arr[1]))
 				else:
-					print "Restart all processes"
+					print("Restart all processes")
 					self.terminateAll()
 					self.setupAll()
 					self.startAll()
@@ -127,14 +129,17 @@ Manage multiprocess spider, use below command(press key before the command):
 		self.terminateAll()
 
 if __name__ == '__main__':
-
+	Log.setup(__name__)
 	def worker(pid, states):
 		from time import sleep
-		states[pid] = STATE_IDLE
-		sleep(3)
-		states[pid] = STATE_BUSY
-		sleep(30)
-		states[pid] = STATE_TERMINATE
+		try:
+			states[pid] = STATE_IDLE
+			sleep(3)
+			states[pid] = STATE_BUSY
+			sleep(30)
+			states[pid] = STATE_TERMINATE
+		except KeyboardInterrupt:
+			Log.d("worker end!")
 
 	spm = ProcessManager(worker)
 	spm.run()

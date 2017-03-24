@@ -3,6 +3,7 @@
 from Queue import Queue
 from threading import Thread
 from threading import Lock
+from config import Log
 
 class Task(object):
 	def __init__(self):
@@ -45,9 +46,7 @@ class Worker(object):
 		self.isTerminate = True
 		self.__thread = None
 		self.__threadpool.removeThread(self)
-
-		print "[Info]work thread terminated!"
-
+		Log.d("{Worker.run} work thread terminated!")
 
 class ThreadPool(object):
 
@@ -62,13 +61,13 @@ class ThreadPool(object):
 		self.lockObj.acquire()
 		self.threads.append(thread)
 		self.lockObj.release()
-		print "[Info] pool thread count: ", len(self.threads)
+		Log.d("{Worker.addThread} pool thread count(%d)", len(self.threads))
 
 	def removeThread(self, thread):
 		self.lockObj.acquire()
 		self.threads.remove(thread)
 		self.lockObj.release()
-		print "[Info] pool thread count: ", len(self.threads)
+		Log.d("{Worker.removeThread} pool thread count(%d)", len(self.threads))
 
 	def runTaskAsync(self, task = None, callback = None, params = []):
 		if task is None:

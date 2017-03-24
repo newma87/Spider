@@ -1,0 +1,97 @@
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+    "formatters": {
+        "simple": {
+            "format": "[%(levelname)s] %(asctime)s <%(name)s>: %(message)s",
+            "datefmt": "%Y-%m-%d_%H:%M:%S"
+        }
+    },
+
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "level": "DEBUG",
+            "formatter": "simple",
+            "stream": "ext://sys.stdout"
+        },
+
+        "server_file_handler": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "INFO",
+            "formatter": "simple",
+            "filename": "server_logs.log",
+            "maxBytes": 10485760,
+            "backupCount": 20,
+            "encoding": "utf8"
+        },
+
+        "spider_file_handler": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "INFO",
+            "formatter": "simple",
+            "filename": "spider_logs.log",
+            "maxBytes": 10485760,
+            "backupCount": 20,
+            "encoding": "utf8"
+        },
+
+        "download_file_handler": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "INFO",
+            "formatter": "simple",
+            "filename": "download_logs.log",
+            "maxBytes": 10485760,
+            "backupCount": 20,
+            "encoding": "utf8"
+        },
+
+        "info_file_handler": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "INFO",
+            "formatter": "simple",
+            "filename": "lib_infos.log",
+            "maxBytes": 10485760,
+            "backupCount": 20,
+            "encoding": "utf8"
+        },
+
+        "error_file_handler": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "ERROR",
+            "formatter": "simple",
+            "filename": "lib_errors.log",
+            "maxBytes": 10485760,
+            "backupCount": 20,
+            "encoding": "utf8"
+        }
+    },
+
+    "loggers": {
+        "console only": {
+            "level": "DEBUG",
+            "handlers": ["console"],
+            "propagate": false
+        },
+        "server": {
+            "level": "DEBUG",
+            "handlers": ["console", "server_file_handler"],
+            "propagate": false
+        },
+        "spider": {
+            "level": "DEBUG",
+            "handlers": ["console", "spider_file_handler"],
+            "propagate": false
+        },
+        "download": {
+            "level": "DEBUG",
+            "handlers": ["console", "download_file_handler"],
+            "propagate": false
+        }
+    },
+
+    "root": {
+        "level": "WARN",
+        "handlers": ["console", "info_file_handler", "error_file_handler"]
+    }
+}
