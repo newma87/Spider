@@ -32,6 +32,9 @@ class Downloader(object):
 			sha = hashlib.sha1()
 			sha.update(src)
 			file_name = sha.hexdigest()
+
+		if not os.path.exists(save_dir):
+			os.makedirs(save_dir)
 		path = os.path.join(save_dir, file_name + ext)
 
 		ret = False
@@ -113,7 +116,7 @@ def procMain(pid, states):
 			if images:
 				states[pid] = STATE_BUSY
 				for img in images:
-					save_dir = getDir()
+					save_dir = getDir() + '/' + img.save_path.replace('/', '\\')
 					file_name = None
 					if img.name != "":
 						file_name = img.name 

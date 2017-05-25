@@ -19,6 +19,9 @@ class Spider(HTMLParser):
 		HTMLParser.__init__(self)
 		self.imgs = set()
 		self.hrefs = set()
+		self.title = None
+		self.findTitle = False
+		self.canGetTitle = False
 		self.__feedingUrl = None
 
 	def __adjustUrl(self, src_url):
@@ -105,6 +108,20 @@ class Spider(HTMLParser):
 				if self.__isValidateUrl(url):
 					Log.d("link: %s", url)
 					self.hrefs.add(url)
+					
+		if self.title == None:
+			if self.findTitle == False:
+				if tag == 'div':
+					attrs = dict(attrs);
+					if attrs.has_key('class') and attrs['class'] == 't t2':
+						self.findTitle = True;
+			elif tag == 'h4':
+				self.canGetTitle = True
+
+	def handle_data(self, data):
+		if self.title == None and self.findTitle == True and self.canGetTitle == True:
+			self.title = data
+			Log.d("title: %s", self.title);
 
 	def __getHtmlEncode(self, text, default = 'unicode'):
 		reg = re.compile("<meta.*?charset=([^\s\"'/>;]+)")
@@ -126,6 +143,7 @@ class Spider(HTMLParser):
 				resp.encoding = self.__getHtmlEncode(resp.text)
 				#print '[Debug]Using encoding{%s} for HTML {%s}' % (resp.encoding, url)
 				#print resp.text
+
 				self.feed(resp.text)
 				ret = True
 			else:
@@ -205,14 +223,18 @@ def uploadImages(images):
 def calcPriority(dist_url, src_url):
 	dist = dist_url.split('/')
 	src = src_url.split('/')
+    
 	dist_len = len(dist)
 	src_len = len(src)
 	priority = dist_len
 
-	if dist_len >= src_len:
-		index = src_len - 1
-		if src[index] in dist[index] or dist[index] in src[index]:
-			priority += 1
+	addition = 0
+	for d in dist:
+		if addition >= src_len or not (d == src[addition]):
+			break
+		addition = addition + 1
+
+	priority += addition
 
 	return priority
 
@@ -227,16 +249,18 @@ def procMain(pid, states):
 			Log.d("{procMain} fetched websites(%d)", len(websites))
 			if websites:
 				states[pid] = STATE_BUSY
-				spider = Spider()
 				wbs = set()
 				images = set()
+
 				for web in websites:
+					spider = Spider()
 					if spider.fetchForUrl(web.url):
 						web.request_state = REQUEST_STATE.SUCC
 						for url in spider.hrefs:
 							wbs.add(DBWebsite(url = url, from_url = web.id, priority = calcPriority(url, web.url)))
 						for img in spider.imgs:
-							images.add(DBImage(url = img, from_website = web.id))
+							images.add(DBImage(url = img, from_website = web.id, save_path = spider.title))
+						web.title = spider.title
 					else:
 						web.request_state = REQUEST_STATE.FAIL
 						retry_times = MAX_REQUEST_RETRY_TIME
@@ -249,7 +273,8 @@ def procMain(pid, states):
 								for url in spider.hrefs:
 									wbs.add(DBWebsite(url = url, from_url = web.id))
 								for img in spider.imgs:
-									images.add(DBImage(url = img, from_website = web.id))
+									images.add(DBImage(url = img, from_website = web.id, save_path = spider.title))
+								web.title = spider.title
 								break
 						if web.request_state != REQUEST_STATE.SUCC:
 							Log.e("{procMain} fetch url(%s) id(%d) failed!", web.url, web.id)
@@ -266,7 +291,7 @@ if __name__ == '__main__':
 	Log.setup('spider')
 
 	#procMain(1, {})
-
+	
 	num = 1
 	if len(os.sys.argv) > 1:
 		num = int(os.sys.argv[1])

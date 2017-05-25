@@ -16,10 +16,10 @@ import re
 
 from processmanager import *
 
-WEBSITE_INSERT = "INSERT IGNORE INTO website (url, request_state, from_url, priority) VALUES (%s, %s, %s, %s);"
+WEBSITE_INSERT = "INSERT IGNORE INTO website (url, title, request_state, from_url, priority) VALUES (%s, %s, %s, %s, %s);"
 WEBSITE_DELETE_BY_ID = "DELETE from website where id=%s;"
-WEBSITE_UPDATE_BY_ID = "UPDATE website SET url=%s, request_state=%s, from_url=%s, priority=%s WHERE id=%s;"
-WEBSITE_UPDATE_MUTIL = "INSERT INTO website (url, request_state, from_url, priority, id) VALUES (%s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE id=VALUES(id), url=VALUES(url), request_state=VALUES(request_state), from_url=VALUES(from_url), priority=VALUES(priority);"
+WEBSITE_UPDATE_BY_ID = "UPDATE website SET url=%s, title = %s, request_state=%s, from_url=%s, priority=%s WHERE id=%s;"
+WEBSITE_UPDATE_MUTIL = "INSERT INTO website (url, title, request_state, from_url, priority, id) VALUES (%s, %s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE id=VALUES(id), url=VALUES(url), title = VALUES(title), request_state=VALUES(request_state), from_url=VALUES(from_url), priority=VALUES(priority);"
 WEBSITE_SELECT_BY_ID = "SELECT * FROM website WHERE id=%s ORDER BY priority DESC;"
 WEBSITE_SELECT_BY_URL = "SELECT * FROM website WHERE url=%s ORDER BY priority DESC;"
 WEBSITE_SELECT_BY_STATE = "SELECT * FROM website WHERE request_state=%s ORDER BY priority DESC FOR UPDATE;"
@@ -115,6 +115,7 @@ class DBOperator(object):
 			return [DBImage(dict = row) for row in rows]
 		else:
 			return None
+
 	#=================website=======================
 	def refreshWebsitesState(self):
 		return self.conn.update(WEBSITE_UPDATE_STATE)
@@ -141,7 +142,7 @@ class DBOperator(object):
 			return None
 
 	def insertWebsite(self, website):
-		ret = self.conn.insertOne(WEBSITE_INSERT, (D(website.url), D(website.request_state), D(website.from_url), D(website.priority)))
+		ret = self.conn.insertOne(WEBSITE_INSERT, (D(website.url), D(website.title), D(website.request_state), D(website.from_url), D(website.priority)))
 		if ret > 0:
 			website.id = ret
 			return self.getWebsiteById(website.id)
@@ -151,14 +152,14 @@ class DBOperator(object):
 	def insertMutilWebsite(self, websites):
 		if not websites or len(websites) == 0:
 			return 0
-		vals = [(D(web.url), D(web.request_state), D(web.from_url), D(web.priority)) for web in websites]
+		vals = [(D(web.url), D(web.title), D(web.request_state), D(web.from_url), D(web.priority)) for web in websites]
 		count = self.conn.insertMany(WEBSITE_INSERT, vals)
 		return count
 
 	def updateWebsite(self, website):
 		if not website:
 			return 0
-		count = self.conn.update(WEBSITE_UPDATE_BY_ID, (D(website.url), D(website.request_state), D(website.from_url), D(website.priority), D(website.id)))
+		count = self.conn.update(WEBSITE_UPDATE_BY_ID, (D(website.url), D(website.title), D(website.request_state), D(website.from_url), D(website.priority), D(website.id)))
 		return count
 
 	def deleteWebsiteById(self, id):
@@ -168,7 +169,7 @@ class DBOperator(object):
 	def updateMutilWebsite(self, websites):
 		if not websites or len(websites) == 0:
 			return 0
-		vals = [(D(web.url), D(web.request_state), D(web.from_url), D(web.priority), D(web.id)) for web in websites]
+		vals = [(D(web.url), D(web.title), D(web.request_state), D(web.from_url), D(web.priority), D(web.id)) for web in websites]
 		count = self.conn.insertMany(WEBSITE_UPDATE_MUTIL, vals)
 		return count / 2
 
