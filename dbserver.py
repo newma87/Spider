@@ -23,7 +23,7 @@ WEBSITE_UPDATE_MUTIL = "INSERT INTO website (url, title, request_state, from_url
 WEBSITE_SELECT_BY_ID = "SELECT * FROM website WHERE id=%s ORDER BY priority DESC;"
 WEBSITE_SELECT_BY_URL = "SELECT * FROM website WHERE url=%s ORDER BY priority DESC;"
 WEBSITE_SELECT_BY_STATE = "SELECT * FROM website WHERE request_state=%s ORDER BY priority DESC FOR UPDATE;"
-WEBSITE_UPDATE_STATE = "UPDATE website SET request_state=0 WHERE request_state=1 AND NOW() > DATE_ADD(last_modify, INTERVAL '%s' MINUTE);" % (REFRESH_STATE_INTERVAL)
+WEBSITE_UPDATE_STATE = "UPDATE website SET request_state=0 WHERE request_state=1;"
 
 IMAGE_INSERT = "INSERT IGNORE INTO image (url, request_state, name, save_path, from_website) VALUES (%s, %s, %s, %s, %s);"
 IMAGE_DELETE_BY_ID = "DELETE from image where id=%s;"
@@ -32,7 +32,9 @@ IMAGE_UPDATE_MUTIL = "INSERT INTO image (url, request_state, name, save_path, fr
 IMAGE_SELECT_BY_ID = "SELECT * FROM image WHERE id=%s;"
 IMAGE_SELECT_BY_URL = "SELECT * FROM image WHERE url=%s;"
 IMAGE_SELECT_BY_STATE = "SELECT * FROM image WHERE request_state=%s FOR UPDATE;"
-IMAGE_UPDATE_STATE = "UPDATE image SET request_state=0 WHERE request_state=1 AND NOW() > DATE_ADD(last_modify, INTERVAL '%s' MINUTE);" % (REFRESH_STATE_INTERVAL)
+IMAGE_UPDATE_STATE = "UPDATE image SET request_state=0 WHERE request_state=1;"
+
+SQL_TIME_COND = " AND NOW() > DATE_ADD(last_modify, INTERVAL '%s' MINUTE);" % (REFRESH_STATE_INTERVAL)
 
 def D(value):
 	if type(value) is not str:
@@ -47,6 +49,7 @@ def get_server(addr, means = 'socket'):
 	if means.lower() == 'socket':
 		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		Log.d("{get_server} server listen on address (%s)", addr)
+		s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		s.bind(addr)
 		s.listen(1)
 	else:
@@ -65,8 +68,12 @@ class DBOperator(object):
 		self.__needRollback = True
 
 #====================image=======================================
-	def refreshImagesState(self):
-		return self.conn.update(IMAGE_UPDATE_STATE)
+	def refreshImagesState(self, immediately):
+		strSQL = IMAGE_UPDATE_STATE
+		if (not immediately):
+			strSQL = IMAGE_UPDATE_STATE[:-1] + SQL_TIME_COND
+		#print strSQL
+		return self.conn.update(strSQL)
 
 	def insertImage(self, image):
 		image.id = self.conn.insertOne(IMAGE_INSERT, (D(image.url), D(image.request_state), D(image.name), D(image.save_path), D(image.from_website)))
@@ -117,8 +124,12 @@ class DBOperator(object):
 			return None
 
 	#=================website=======================
-	def refreshWebsitesState(self):
-		return self.conn.update(WEBSITE_UPDATE_STATE)
+	def refreshWebsitesState(self, immediately):
+		strSQL = WEBSITE_UPDATE_STATE
+		if (not immediately):
+			strSQL = WEBSITE_UPDATE_STATE[:-1] + SQL_TIME_COND
+		#print strSQL
+		return self.conn.update(strSQL)
 
 	def getWebsiteByUrl(self, url):
 		obj = self.conn.getOne(WEBSITE_SELECT_BY_URL, (D(url), ))
@@ -191,11 +202,17 @@ class DBServer(object):
 		self.__pool = ThreadPool(maxsize = 4)
 
 	def run(self):
-		Log.i("{DBServer.run} DBServer started!")
 		self.isTerminal = False
 		server = get_server(self.address, means = CONFIG.COMMUNICATE_MEANS)
 
+		# clear last uncompleted data record in database
+		Log.i("{DBServer.run} clean dirty record(caused by shutdown) in database...")
+		with DBOperator() as db:
+			db.refreshWebsitesState(True)
+			db.refreshImagesState(True)
+
 		try:
+			Log.i("{DBServer.run} DBServer started!")
 			while not self.isTerminal:
 				conn = server.accept()
 				if type(conn) is tuple: # server must be a socket, not a multiprocessing.connection.Listener
@@ -211,7 +228,7 @@ class DBServer(object):
 	def queryValidateWebsites(self):
 		ret = None
 		with DBOperator() as db:
-			websites = db.getWebsiteByState(REQUEST_STATE.NONE, maxNum = CONFIG.MAX_FETCH_NUM)
+			websites = db.getWebsiteByState(REQUEST_STATE.NONE, maxNum = CONFIG.MAX_WEB_FETCH_NUM)
 			if websites:
 				for web in websites:
 					web.request_state = REQUEST_STATE.DOING
@@ -224,7 +241,7 @@ class DBServer(object):
 					ret = websites
 			else:
 				Log.w("{DBServer.queryValidateWebsite} can't found unvisited website, so refresh request_state")
-				db.refreshWebsitesState()
+				db.refreshWebsitesState(True)
 		return ret
 
 	def uploadWebsites(self, websites):
@@ -246,7 +263,7 @@ class DBServer(object):
 	def queryValidateImages(self):
 		ret = None
 		with DBOperator() as db:
-			images = db.getImageByState(REQUEST_STATE.NONE, maxNum = CONFIG.MAX_FETCH_NUM)
+			images = db.getImageByState(REQUEST_STATE.NONE, maxNum = CONFIG.MAX_IMAGE_FETCH_NUM)
 			if images:
 				for img in images:
 					img.request_state = REQUEST_STATE.DOING
@@ -259,7 +276,7 @@ class DBServer(object):
 					ret = images
 			else:
 				Log.w("{DBServer.queryValidateImage} can't found undownload image, so refresh the request_state")
-				db.refreshImagesState()
+				db.refreshImagesState(True)
 		return ret	
 
 	def uploadImages(self, images):
@@ -353,6 +370,7 @@ def procMain(pid, states):
 
 if __name__ == '__main__':
 	Log.setup('server')
+	Log.d('setting up server......')
 
 	"""
 	url = raw_input("please input need to insert url: ")

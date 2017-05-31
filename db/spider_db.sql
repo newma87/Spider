@@ -10,7 +10,7 @@ Target Server Type    : MYSQL
 Target Server Version : 50625
 File Encoding         : 65001
 
-Date: 2017-03-22 20:52:39
+Date: 2017-05-31 08:17:14
 */
 
 SET FOREIGN_KEY_CHECKS=0;
@@ -24,7 +24,7 @@ CREATE TABLE `image` (
   `url` varchar(1024) DEFAULT NULL,
   `request_state` tinyint(1) unsigned NOT NULL DEFAULT '0',
   `name` varchar(255) DEFAULT NULL,
-  `save_path` varchar(255) DEFAULT NULL,
+  `save_path` varchar(2048) DEFAULT NULL,
   `from_website` int(255) unsigned NOT NULL DEFAULT '0',
   `last_modify` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -50,6 +50,7 @@ DROP TABLE IF EXISTS `website`;
 CREATE TABLE `website` (
   `id` int(255) unsigned NOT NULL AUTO_INCREMENT,
   `url` varchar(1024) DEFAULT NULL,
+  `title` varchar(1024) DEFAULT NULL,
   `request_state` tinyint(1) unsigned NOT NULL DEFAULT '0',
   `from_url` int(255) unsigned NOT NULL DEFAULT '0',
   `priority` int(8) NOT NULL DEFAULT '0',

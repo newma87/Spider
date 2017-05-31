@@ -20,8 +20,6 @@ class REQUEST_STATE(object):
 class CommunicateConfig(object):
 	RPC_PORT = 6580
 	AUTH_KEY = "my secret password"
-	
-	MAX_FETCH_NUM = 10
 
 	COMMUNICATE_MEANS = 'socket' # socket or pipe
 
@@ -40,14 +38,14 @@ class CommunicateConfig(object):
 
 class DBServerConfig(CommunicateConfig):
 	HOST = ""
+	MAX_IMAGE_FETCH_NUM = 30
+	MAX_WEB_FETCH_NUM = 10
 
 class DownloadConfig(CommunicateConfig):
 	DB_HOST = "localhost"
-	MAX_PROC_NUM = 10
 	
 class SpiderConfig(CommunicateConfig):
 	DB_HOST = "localhost"
-	MAX_PROC_NUM = 10
 
 
 PROXY_CONFIG = {

@@ -116,6 +116,8 @@ def procMain(pid, states):
 			if images:
 				states[pid] = STATE_BUSY
 				for img in images:
+					if (len(img.save_path) > 255):
+						img.save_path = img.save_path[:255]
 					save_dir = getDir() + '/' + img.save_path.replace('/', '\\')
 					file_name = None
 					if img.name != "":
@@ -156,6 +158,7 @@ def procMain(pid, states):
 
 if __name__ == '__main__':
 	Log.setup("download")
+	Log.d('setting up downloader......')
 
 	"""
 	procMain(1, {})

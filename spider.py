@@ -236,6 +236,22 @@ def calcPriority(dist_url, src_url):
 
 	priority += addition
 
+	#TODO: 特殊处理
+	if (dist_url.find('index.php') != -1):
+		priority += 300
+	if (dist_url.find('/htm_data/16/') != -1):
+		priority += 150
+	if (dist_url.find('fid=16') != -1):
+		if (dist_url.find('&page=') != -1):
+			priority += 100
+		priority += 100
+	if (dist_url.find('/htm_data/8/') != -1):
+		priority += 50
+	if (dist_url.find('fid=8') != -1):
+		if (dist_url.find('&page=') != -1):
+			priority += 50
+		priority += 50
+
 	return priority
 
 def procMain(pid, states):
@@ -271,7 +287,7 @@ def procMain(pid, states):
 							if spider.fetchForUrl(web.url):
 								web.request_state = REQUEST_STATE.SUCC
 								for url in spider.hrefs:
-									wbs.add(DBWebsite(url = url, from_url = web.id))
+									wbs.add(DBWebsite(url = url, from_url = web.id, priority = calcPriority(url, web.url)))
 								for img in spider.imgs:
 									images.add(DBImage(url = img, from_website = web.id, save_path = spider.title))
 								web.title = spider.title
@@ -289,9 +305,10 @@ def procMain(pid, states):
 
 if __name__ == '__main__':
 	Log.setup('spider')
+	Log.d('setting up spider......')
 
 	#procMain(1, {})
-	
+
 	num = 1
 	if len(os.sys.argv) > 1:
 		num = int(os.sys.argv[1])
@@ -300,3 +317,4 @@ if __name__ == '__main__':
 
 	pm = ProcessManager(procMain, maxWorker = num)
 	pm.run()
+
